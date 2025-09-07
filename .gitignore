@@ -1,0 +1,24 @@
+# 敏感配置文件
+.streamlit/secrets.toml
+config.json
+
+# 开发文件
+PLAN.md
+generate_experience_codes.py
+
+# 其他敏感文件
+*.env
+.env
+.env.local
+.env.production
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+__pycache__/
+*.pyc
+*.pyo

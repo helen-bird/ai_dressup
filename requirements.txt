@@ -1,0 +1,11 @@
+# AI虚拟换装系统依赖包
+# 安装命令: pip install -r requirements.txt
+
+# Web应用框架
+streamlit>=1.28.0
+
+# Google Gemini AI客户端
+google-genai>=0.3.0
+
+# 图像处理库
+pillow>=10.0.0
