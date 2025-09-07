@@ -6,7 +6,11 @@ import datetime
 import hashlib
 from PIL import Image
 import io
+import warnings
 from image_generator import ImageGenerator
+
+# 忽略所有警告
+warnings.filterwarnings("ignore")
 
 # 体验码验证函数
 def load_experience_codes():
