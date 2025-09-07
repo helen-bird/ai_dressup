@@ -875,7 +875,7 @@ with col3:
                                 increment_generated_count()
                                 
                                 # 显示生成的图片
-                                result_image = Image.open(result_image_path)
+                                result_image = Image.open('./' + result_image_path)
                                 st.image(result_image, caption="AI生成的融合效果", use_column_width=True)
                                 
                                 # 自动刷新页面以更新剩余次数显示
