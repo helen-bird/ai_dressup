@@ -170,34 +170,59 @@ class ImageGenerator:
             try:
                 print(f"正在调用API生成内容... (尝试 {attempt + 1}/{max_retries})")
                 
-                for chunk in self.client.models.generate_content_stream(
+                # 使用非流式API调用，避免数据截断问题
+                response = self.client.models.generate_content(
                     model=model,
                     contents=contents,
                     config=generate_content_config,
-                ):
-                    if (
-                        chunk.candidates is None
-                        or chunk.candidates[0].content is None
-                        or chunk.candidates[0].content.parts is None
-                    ):
-                        continue
-                        
-                    if chunk.candidates[0].content.parts[0].inline_data and chunk.candidates[0].content.parts[0].inline_data.data:
-                        inline_data = chunk.candidates[0].content.parts[0].inline_data
+                )
+                
+                # 检查响应是否有效
+                if (response.candidates is None or 
+                    len(response.candidates) == 0 or
+                    response.candidates[0].content is None or
+                    response.candidates[0].content.parts is None):
+                    print("API响应无效：没有候选内容")
+                    continue
+                
+                # 处理响应中的图像数据
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                        inline_data = part.inline_data
                         data_buffer = inline_data.data
                         
                         # 打印MIME类型信息用于调试
                         print(f"API返回的MIME类型: {inline_data.mime_type}")
-                        print(f"数据长度: {len(data_buffer)} 字节")
+                        print(f"原始数据长度: {len(data_buffer)} 字节")
                         
-                        # 检查数据是否是Base64编码的
-                        try:
-                            # 尝试解码Base64数据
-                            decoded_data = base64.b64decode(data_buffer)
-                            print(f"Base64解码后数据长度: {len(decoded_data)} 字节")
-                            data_buffer = decoded_data
-                        except Exception as e:
-                            print(f"Base64解码失败，使用原始数据: {e}")
+                        # 检查数据格式并正确处理
+                        print(f"数据类型: {type(data_buffer)}")
+                        
+                        # 检查数据是否是字符串（Base64）还是二进制
+                        if isinstance(data_buffer, str):
+                            print("数据是字符串格式，尝试Base64解码...")
+                            try:
+                                # 尝试解码Base64数据
+                                decoded_data = base64.b64decode(data_buffer)
+                                print(f"Base64解码成功: {len(decoded_data)} 字节")
+                                
+                                # 验证解码后的数据大小是否合理
+                                if len(decoded_data) < 1000:  # 如果解码后数据太小，可能有问题
+                                    print(f"⚠ 警告：解码后数据大小异常小 ({len(decoded_data)} bytes)")
+                                    # 尝试重新编码再解码验证
+                                    re_encoded = base64.b64encode(decoded_data).decode('utf-8')
+                                    if re_encoded != data_buffer:
+                                        print("⚠ 数据完整性检查失败：重新编码后不匹配")
+                                        continue
+                                
+                                data_buffer = decoded_data
+                                
+                            except Exception as e:
+                                print(f"Base64解码失败: {e}")
+                                continue
+                        else:
+                            print("✓ 数据是二进制格式，直接使用")
+                            # 数据已经是二进制，直接使用
                         
                         # 根据MIME类型确定正确的文件扩展名
                         if inline_data.mime_type == "image/png":
@@ -229,12 +254,45 @@ class ImageGenerator:
                             print(f"✓ {final_output_path} 是有效的{format_info}文件")
                         else:
                             print(f"⚠ {final_output_path} 文件验证失败: {format_info}")
+                            
+                            # 如果文件验证失败，尝试修复
+                            print("🔧 尝试修复损坏的文件...")
+                            try:
+                                # 读取损坏的文件
+                                with open(final_output_path, "rb") as f:
+                                    corrupted_data = f.read()
+                                
+                                # 检查是否是Base64数据被错误写入
+                                if len(corrupted_data) < 1000 and isinstance(corrupted_data, bytes):
+                                    try:
+                                        # 尝试将损坏的数据当作Base64解码
+                                        fixed_data = base64.b64decode(corrupted_data)
+                                        print(f"修复成功：解码后大小 {len(fixed_data)} bytes")
+                                        
+                                        # 保存修复后的文件
+                                        fixed_path = final_output_path.replace('.png', '_fixed.png')
+                                        with open(fixed_path, "wb") as f:
+                                            f.write(fixed_data)
+                                        
+                                        # 验证修复后的文件
+                                        is_fixed_valid, fixed_format = self._validate_image_file(fixed_path)
+                                        if is_fixed_valid:
+                                            print(f"✅ 文件修复成功: {fixed_path}")
+                                            # 替换原文件
+                                            os.replace(fixed_path, final_output_path)
+                                        else:
+                                            print(f"❌ 修复后仍无效: {fixed_format}")
+                                            
+                                    except Exception as fix_e:
+                                        print(f"❌ 修复失败: {fix_e}")
+                                        
+                            except Exception as e:
+                                print(f"❌ 修复过程出错: {e}")
                         
                         file_index += 1
                         break  # 只处理第一个图像
-                    else:
-                        if hasattr(chunk, 'text') and chunk.text:
-                            print(f"文本内容: {chunk.text}")
+                    elif hasattr(part, 'text') and part.text:
+                        print(f"文本内容: {part.text}")
                 
                 # 如果成功处理了图像，跳出重试循环
                 if file_index > 0:
